@@ -6,3 +6,9 @@ ide/vs20??/.vs
 out/
 docs/
 *.zip
+
+
+# Added by cargo
+
+/target
+/Cargo.lock
