@@ -1,12 +1,9 @@
-use crate::internal::{_mi_align_up, _mi_heap_empty, mi_page_heap};
+use crate::heap::{_mi_heap_empty, mi_heap_t, MI_BIN_HUGE, MI_BIN_FULL};
+use crate::internal::{_mi_align_up, mi_page_heap};
 use crate::internal::{_mi_wsize_from_size, mi_bsr};
 use crate::os::_mi_os_page_size;
-use crate::types::mi_heap_t;
-use crate::types::MI_BIN_FULL;
-use crate::types::{
-    mi_page_queue_t, mi_page_t, MI_BIN_HUGE, MI_INTPTR_SIZE, MI_MAX_ALIGN_SIZE,
-    MI_MEDIUM_OBJ_SIZE_MAX, MI_MEDIUM_OBJ_WSIZE_MAX,
-};
+use crate::page::{mi_page_t, MI_MEDIUM_OBJ_SIZE_MAX, MI_MEDIUM_OBJ_WSIZE_MAX};
+use crate::constants::{MI_INTPTR_SIZE, MI_MAX_ALIGN_SIZE};
 
 const MI_ALIGN4W: usize = 4;
 const MI_ALIGN2W: usize = 2;
@@ -21,23 +18,50 @@ const MI_ALIGNMENT: usize = if MI_MAX_ALIGN_SIZE > (4 * MI_INTPTR_SIZE) {
     MI_ALIGN1W
 };
 
-/* -----------------------------------------------------------
-  Queue query
------------------------------------------------------------ */
-#[inline(always)]
-const fn mi_page_queue_is_huge(pq: mi_page_queue_t) -> bool {
-    pq.block_size == MI_MEDIUM_OBJ_SIZE_MAX + std::mem::size_of::<usize>()
+// Pages of a certain block size are held in a queue.
+#[derive(PartialEq, PartialOrd)]
+pub struct mi_page_queue_s {
+    pub first: *mut mi_page_t,
+    pub last: *mut mi_page_t,
+    pub block_size: usize,
+}
+impl mi_page_queue_s {
+    const fn new() -> Self {
+        Self {
+            first: std::ptr::null_mut(),
+            last: std::ptr::null_mut(),
+            block_size: 0,
+        }
+    }
+
+    /* -----------------------------------------------------------
+      Queue query
+    ----------------------------------------------------------- */
+    #[inline(always)]
+    const fn mi_page_queue_is_huge(pq: mi_page_queue_t) -> bool {
+        pq.block_size == MI_MEDIUM_OBJ_SIZE_MAX + std::mem::size_of::<usize>()
+    }
+
+    #[inline(always)]
+    const fn mi_page_queue_is_full(pq: mi_page_queue_t) -> bool {
+        pq.block_size == MI_MEDIUM_OBJ_SIZE_MAX + (2 * std::mem::size_of::<usize>())
+    }
+
+    #[inline(always)]
+    const fn mi_page_queue_is_special(pq: mi_page_queue_t) -> bool {
+        pq.block_size > MI_MEDIUM_OBJ_SIZE_MAX
+    }
 }
 
-#[inline(always)]
-const fn mi_page_queue_is_full(pq: mi_page_queue_t) -> bool {
-    pq.block_size == MI_MEDIUM_OBJ_SIZE_MAX + (2 * std::mem::size_of::<usize>())
+impl Default for mi_page_queue_s {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-#[inline(always)]
-const fn mi_page_queue_is_special(pq: mi_page_queue_t) -> bool {
-    pq.block_size > MI_MEDIUM_OBJ_SIZE_MAX
-}
+pub const mi_page_queue_uninit: mi_page_queue_s = mi_page_queue_s::new();
+
+pub type mi_page_queue_t = mi_page_queue_s;
 
 /* -----------------------------------------------------------
   Bins
@@ -126,21 +150,22 @@ pub const unsafe fn mi_heap_contains_queue(
 where
     *const mi_page_queue_t: ~const PartialOrd,
 {
+    use crate::heap::{mi_heap_t, MI_BIN_FULL};
+
     pq >= &(*heap).pages[0] && pq <= &(*heap).pages[MI_BIN_FULL]
     // consider introducing a `where` clause, but there might be an alternative better way to express this requirement: ` where *const mi_page_queue_s: ~const PartialOrd`
 }
 
-pub unsafe fn mi_page_queue_of(page: *const mi_page_t) -> *mut mi_page_queue_t {
-    let bin: u8 = if mi_page_t::mi_page_is_in_full(page) {
+pub unsafe fn mi_page_queue_of(page: &mi_page_t) -> *mut mi_page_queue_t {
+    let bin: u8 = if mi_page_t::is_in_full(page) {
         MI_BIN_FULL as u8
     } else {
         mi_bin((*page).xblock_size as usize)
     };
     let heap: *mut mi_heap_t = mi_page_heap(page);
-    // mi_assert_internal(heap != NULL && bin <= MI_BIN_FULL);
     debug_assert!(!heap.is_null() && bin <= MI_BIN_FULL as u8);
     let pq: *mut mi_page_queue_t = (*heap).pages[bin as usize..].as_mut_ptr();
-    debug_assert!(bin >= MI_BIN_HUGE as u8 || (*page).xblock_size == (*pq).block_size as u32);
-    // mi_assert_expensive(mi_page_queue_contains(pq, page));
-    return pq;
+    debug_assert!(bin >= MI_BIN_HUGE as u8 || page.xblock_size == (*pq).block_size as u32);
+    // TODO: mi_assert_expensive(mi_page_queue_contains(pq, page));
+    pq
 }

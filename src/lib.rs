@@ -6,6 +6,9 @@
 mod alloc;
 mod arena;
 mod bitmap;
+mod block;
+mod constants;
+mod debug;
 mod heap;
 mod internal;
 mod mimalloc;
@@ -15,5 +18,6 @@ mod page;
 mod page_queue;
 mod random;
 mod segment;
+mod span_queue;
 mod stats;
-mod types;
+mod thread;

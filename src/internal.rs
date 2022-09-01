@@ -1,6 +1,10 @@
-use crate::types::mi_delayed_e::MI_DELAYED_FREEING;
-use crate::types::{mi_block_t, mi_delayed_t, mi_heap_t, mi_page_t, MI_INTPTR_BITS};
+use crate::heap::mi_heap_t;
+use crate::page::mi_page_t;
+use crate::constants::MI_INTPTR_BITS;
+use crate::{block::mi_block_t, thread::mi_delayed_t};
 use std::sync::atomic::{AtomicPtr, Ordering};
+
+use crate::segment::mi_segment_t;
 
 #[inline(always)]
 pub const fn mi_clz(x: usize) -> usize {
@@ -50,10 +54,6 @@ We try to circumvent this in an efficient way:
 - OpenBSD: we use an unused slot from the pthread block (MI_TLS_PTHREAD_SLOT_OFS).
 - DragonFly: defaults are working but seem slow compared to freeBSD (see PR #323)
 ------------------------------------------------------------------------------------------- */
-
-pub const _mi_heap_empty: mi_heap_t = mi_heap_t::new(); // read-only empty heap, initial value of the thread local default heap
-pub static _mi_process_is_initialized: bool = false;
-// mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing heap
 
 // Align upwards
 #[inline(always)]
@@ -157,60 +157,56 @@ pub const fn _mi_wsize_from_size(size: usize) -> usize {
 //-----------------------------------------------------------
 // Page flags
 //-----------------------------------------------------------
-// #[inline(always)]
-// pub const unsafe fn mi_page_is_in_full(page: *const mi_page_t) -> bool {
-//     (*page).flags.x.in_full != 0
-// }
-
-//   static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
-//     page->flags.x.in_full = in_full;
-//   }
-
-//   static inline bool mi_page_has_aligned(const mi_page_t* page) {
-//     return page->flags.x.has_aligned;
-//   }
-
-//   static inline void mi_page_set_has_aligned(mi_page_t* page, bool has_aligned) {
-//     page->flags.x.has_aligned = has_aligned;
-//   }
-
-// Thread free access
-// Untag and read the pointer
-static HAS_DATA: usize = 0x3;
-static FLAG_MASK: usize = !HAS_DATA;
 #[inline(always)]
-pub unsafe fn mi_page_thread_free(page: *const mi_page_t) -> *mut mi_block_t {
-    ((*page).xthread_free.load(Ordering::Relaxed)).map_addr(|addr| addr & FLAG_MASK)
-        as *mut mi_block_t
-    // (mi_atomic_load_relaxed(&(*page).xthread_free) & !3) as *mut mi_block_t
+pub const unsafe fn mi_page_is_in_full(page: &mi_page_t) -> bool {
+    mi_page_t::is_in_full(page)
 }
 
 #[inline(always)]
-pub unsafe fn mi_page_thread_free_flag(page: *const mi_page_t) -> mi_delayed_t {
-    let data = *(*page)
-        .xthread_free
-        .load(Ordering::Relaxed)
-        .map_addr(|addr| addr & HAS_DATA);
-    match data {
-        0 => mi_delayed_t::MI_USE_DELAYED_FREE,
-        1 => mi_delayed_t::MI_DELAYED_FREEING,
-        2 => mi_delayed_t::MI_NO_DELAYED_FREE,
-        3 => mi_delayed_t::MI_NEVER_DELAYED_FREE,
-        _ => unimplemented!(),
-    }
-    // (((*page).xthread_free.load(Ordering::Relaxed) as usize) & 3) as mi_delayed_t
-    // (mi_atomic_load_relaxed(&(*page).xthread_free) & 3) as mi_delayed_t
+pub const fn mi_page_set_in_full(page: &mut mi_page_t, in_full: bool) {
+    mi_page_t::set_in_full(page, in_full)
+}
+
+#[inline(always)]
+pub const unsafe fn mi_page_has_aligned(page: &mi_page_t) -> bool {
+    mi_page_t::has_aligned(page)
+}
+
+#[inline(always)]
+pub const fn mi_page_set_has_aligned(page: &mut mi_page_t, has_aligned: bool) {
+    mi_page_t::set_has_aligned(page, has_aligned)
+}
+
+// size of a segment
+#[inline(always)]
+pub const fn mi_segment_size(segment: &mi_segment_t) -> usize {
+    mi_segment_t::mi_segment_size(segment)
+}
+
+#[inline(always)]
+pub const unsafe fn mi_segment_end(segment: &mi_segment_t) -> *const u8 {
+    mi_segment_t::mi_segment_end(segment)
+}
+
+// Thread free access
+// Untag and read the pointer
+#[inline(always)]
+pub unsafe fn mi_page_thread_free(page: &mi_page_t) -> *mut mi_block_t {
+    mi_page_t::thread_free(page)
+}
+
+#[inline(always)]
+pub unsafe fn mi_page_thread_free_flag(page: &mi_page_t) -> mi_delayed_t {
+    mi_page_t::thread_free_flag(page)
 }
 
 // Heap access
 #[inline(always)]
-pub unsafe fn mi_page_heap(page: *const mi_page_t) -> *mut mi_heap_t {
-    (*page).xheap.load(Ordering::Relaxed)
+pub unsafe fn mi_page_heap(page: &mi_page_t) -> *mut mi_heap_t {
+    mi_page_t::heap(page)
 }
 
 #[inline(always)]
-pub unsafe fn mi_page_set_heap(page: *mut mi_page_t, heap: *mut mi_heap_t) {
-    debug_assert!(mi_page_thread_free_flag(page) as usize != MI_DELAYED_FREEING as usize);
-    (*page).xheap.store(heap, Ordering::Release);
-    // mi_atomic_store_release(&page.xheap, heap as usize);
+pub unsafe fn mi_page_set_heap(page: &mut mi_page_t, heap: *mut mi_heap_t) {
+    mi_page_t::set_heap(page, heap)
 }
