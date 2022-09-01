@@ -10,50 +10,97 @@
 // #endif
 // #endif
 
-use crate::heap::mi_heap_t;
+use crate::heap::Heap;
 
-struct mi_stat_count_s {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+struct StatCount {
     allocated: i64,
     freed: i64,
     peak: i64,
     current: i64,
 }
-type mi_stat_count_t = mi_stat_count_s;
 
-struct mi_stat_counter_s {
+impl StatCount {
+    pub const fn new() -> Self {
+        Self {
+            allocated: 0,
+            freed: 0,
+            peak: 0,
+            current: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+struct StatCounter {
     total: i64,
     count: i64,
 }
-type mi_stat_counter_t = mi_stat_count_s;
 
-pub struct mi_stats_s {
-    segments: mi_stat_count_t,
-    pages: mi_stat_count_t,
-    reserved: mi_stat_count_t,
-    committed: mi_stat_counter_t,
-    reset: mi_stat_counter_t,
-    page_committed: mi_stat_counter_t,
-    segments_abandoned: mi_stat_counter_t,
-    pages_abandoned: mi_stat_counter_t,
-    threads: mi_stat_counter_t,
-    normal: mi_stat_counter_t,
-    huge: mi_stat_counter_t,
-    large: mi_stat_counter_t,
-    malloc: mi_stat_counter_t,
-    segments_cache: mi_stat_counter_t,
-    pages_extended: mi_stat_counter_t,
-    mmap_calls: mi_stat_counter_t,
-    commit_calls: mi_stat_counter_t,
-    page_no_retire: mi_stat_counter_t,
-    searches: mi_stat_counter_t,
-    normal_count: mi_stat_counter_t,
-    huge_count: mi_stat_counter_t,
-    large_count: mi_stat_counter_t,
+impl StatCounter {
+    pub const fn new() -> Self {
+        Self { total: 0, count: 0 }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Stats {
+    segments: StatCount,
+    pages: StatCount,
+    reserved: StatCount,
+    committed: StatCounter,
+    reset: StatCounter,
+    page_committed: StatCounter,
+    segments_abandoned: StatCounter,
+    pages_abandoned: StatCounter,
+    threads: StatCounter,
+    normal: StatCounter,
+    huge: StatCounter,
+    large: StatCounter,
+    malloc: StatCounter,
+    segments_cache: StatCounter,
+    pages_extended: StatCounter,
+    mmap_calls: StatCounter,
+    commit_calls: StatCounter,
+    page_no_retire: StatCounter,
+    searches: StatCounter,
+    normal_count: StatCounter,
+    huge_count: StatCounter,
+    large_count: StatCounter,
     // #if MI_STAT > 1
-    normal_bins: [mi_stat_counter_t; mi_heap_t::MI_BIN_HUGE as usize + 1],
+    normal_bins: [StatCounter; Heap::MI_BIN_HUGE as usize + 1],
     // #endif
 }
-pub type mi_stats_t = mi_stats_s;
+
+impl Stats {
+    pub const fn new() -> Self {
+        Self {
+            segments: StatCount::new(),
+            pages: StatCount::new(),
+            reserved: StatCount::new(),
+            committed: StatCounter::new(),
+            reset: StatCounter::new(),
+            page_committed: StatCounter::new(),
+            segments_abandoned: StatCounter::new(),
+            pages_abandoned: StatCounter::new(),
+            threads: StatCounter::new(),
+            normal: StatCounter::new(),
+            huge: StatCounter::new(),
+            large: StatCounter::new(),
+            malloc: StatCounter::new(),
+            segments_cache: StatCounter::new(),
+            pages_extended: StatCounter::new(),
+            mmap_calls: StatCounter::new(),
+            commit_calls: StatCounter::new(),
+            page_no_retire: StatCounter::new(),
+            searches: StatCounter::new(),
+            normal_count: StatCounter::new(),
+            huge_count: StatCounter::new(),
+            large_count: StatCounter::new(),
+            normal_bins: [StatCounter::new(); Heap::MI_BIN_HUGE as usize + 1],
+        }
+    }
+}
 
 // TODO:
 // void _mi_stat_increase(mi_stat_count_t *stat, size_t amount);

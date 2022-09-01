@@ -55,9 +55,9 @@ pub const fn _mi_align_down(sz: usize, alignment: usize) -> usize {
     let mask: usize = alignment - 1;
     if (alignment & mask) == 0 {
         // power of two?
-        return sz & !mask;
+        sz & !mask
     } else {
-        return (sz / alignment) * alignment;
+        (sz / alignment) * alignment
     }
 }
 

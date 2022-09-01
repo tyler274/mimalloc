@@ -18,7 +18,7 @@ use crate::{
     os::_mi_os_page_size,
     page::{mi_page_t, mi_page_uninit, MI_MEDIUM_OBJ_SIZE_MAX, MI_MEDIUM_OBJ_WSIZE_MAX},
     page_queue::{mi_page_queue_t, mi_page_queue_uninit},
-    thread::{mi_threadid_t, mi_tld_t},
+    thread::{mi_threadid_t, ThreadLocalData},
 };
 use std::{borrow::BorrowMut, cell::UnsafeCell, sync::atomic::AtomicPtr};
 
@@ -73,8 +73,8 @@ const MI_PAGES_DIRECT: usize = MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1;
 
 // A heap owns a set of pages.
 // #[derive(Clone)]
-pub struct mi_heap_s {
-    tld: *mut mi_tld_t,
+pub struct Heap {
+    tld: *mut ThreadLocalData,
     pages_free_direct: [mi_page_t; MI_PAGES_DIRECT], // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
     pages: [mi_page_queue_t; Self::MI_BIN_FULL + 1], // queue of pages for each size class (or "bin")
     thread_delayed_free: AtomicPtr<mi_block_t>,
@@ -85,12 +85,12 @@ pub struct mi_heap_s {
     page_count: usize,        // total number of pages in the `pages` queues.
     page_retired_min: usize, // smallest retired index (retired pages are fully free, but still in the page queues)
     page_retired_max: usize, // largest retired index into the `pages` array.
-    next: *mut mi_heap_t,    // list of heaps per thread
+    next: *mut Heap,         // list of heaps per thread
     no_reclaim: bool,        // `true` if this heap should not reclaim abandoned pages
 }
 
-impl mi_heap_s {
-    pub const _mi_heap_empty: mi_heap_t = mi_heap_t::new(); // read-only empty heap, initial value of the thread local default heap
+impl Heap {
+    pub const _mi_heap_empty: Heap = Heap::new(); // read-only empty heap, initial value of the thread local default heap
 
     pub const fn new() -> Self {
         Self {
@@ -111,7 +111,7 @@ impl mi_heap_s {
     }
     #[cfg(debug_assertions)]
     pub const unsafe fn mi_heap_contains_queue(
-        heap: *const mi_heap_t,
+        heap: *const Heap,
         pq: *const mi_page_queue_t,
     ) -> bool
     where
@@ -122,10 +122,10 @@ impl mi_heap_s {
     }
 
     pub const fn bin_size(bin: u8) -> usize {
-        return mi_heap_t::_mi_heap_empty.pages[bin as usize].block_size;
+        return Heap::_mi_heap_empty.pages[bin as usize].block_size;
     }
 
-    pub const unsafe fn get_page_queue(heap: *mut mi_heap_s, bin: u8) -> *mut mi_page_queue_t {
+    pub const unsafe fn get_page_queue(heap: *mut Heap, bin: u8) -> *mut mi_page_queue_t {
         (*heap).pages[bin as usize..].as_mut_ptr()
     }
 
@@ -188,7 +188,7 @@ impl mi_heap_s {
     // }
 }
 
-impl Default for mi_heap_s {
+impl Default for Heap {
     fn default() -> Self {
         Self::new()
     }
@@ -198,9 +198,13 @@ impl Default for mi_heap_s {
 
 // unsafe impl Sync for mi_heap_s {}
 
-pub type mi_heap_t = mi_heap_s;
-
-pub const _mi_heap_main: UnsafeCell<mi_heap_t> = UnsafeCell::new(mi_heap_t::new());
+pub const _mi_heap_main: UnsafeCell<Heap> = UnsafeCell::new(Heap::new());
 
 pub const _mi_process_is_initialized: UnsafeCell<bool> = UnsafeCell::new(false);
 // mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing heap
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+}

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use crate::{
     block::mi_block_t,
     constants::{MI_ALIGNMENT_MAX, MI_INTPTR_SIZE},
-    heap::mi_heap_t,
+    heap::Heap,
     segment::MI_SEGMENT_SLICE_SIZE,
     thread::mi_delayed_t,
 };
@@ -135,7 +135,7 @@ pub struct mi_page_s {
 
     local_free: *mut mi_block_t, // list of deferred free blocks by this thread (migrates to `free`)
     pub xthread_free: AtomicPtr<mi_thread_free_t>, // list of deferred free blocks freed by other threads
-    pub xheap: AtomicPtr<mi_heap_t>,
+    pub xheap: AtomicPtr<Heap>,
 
     pub next: *mut mi_page_s, // next page owned by this thread with the same `block_size`
     pub prev: *mut mi_page_s, // previous page owned by this thread with the same `block_size`
@@ -234,12 +234,12 @@ impl mi_page_s {
 
     // Heap access
     #[inline(always)]
-    pub unsafe fn heap(page: &mi_page_t) -> *mut crate::heap::mi_heap_t {
+    pub unsafe fn heap(page: &mi_page_t) -> *mut crate::heap::Heap {
         page.xheap.load(Ordering::Relaxed)
     }
 
     #[inline(always)]
-    pub unsafe fn set_heap(page: &mut mi_page_t, heap: *mut crate::heap::mi_heap_t) {
+    pub unsafe fn set_heap(page: &mut mi_page_t, heap: *mut crate::heap::Heap) {
         debug_assert!(
             Self::thread_free_flag(page) as usize != mi_delayed_t::MI_DELAYED_FREEING as usize
         );

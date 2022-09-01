@@ -1,5 +1,5 @@
 use crate::constants::{MI_ALIGN2W, MI_ALIGN4W, MI_ALIGNMENT, MI_INTPTR_SIZE, MI_MAX_ALIGN_SIZE};
-use crate::heap::mi_heap_t;
+use crate::heap::Heap;
 use crate::internal::_mi_align_up;
 use crate::internal::{_mi_wsize_from_size, mi_bsr};
 use crate::os::_mi_os_page_size;
@@ -10,7 +10,7 @@ use crate::page::{mi_page_t, MI_MEDIUM_OBJ_SIZE_MAX, MI_MEDIUM_OBJ_WSIZE_MAX};
 ----------------------------------------------------------- */
 
 // Pages of a certain block size are held in a queue.
-#[derive(PartialEq, PartialOrd)]
+#[derive(PartialEq, Eq, PartialOrd)]
 pub struct mi_page_queue_s {
     pub first: *mut mi_page_t,
     pub last: *mut mi_page_t,
@@ -45,15 +45,15 @@ impl mi_page_queue_s {
 
     pub unsafe fn mi_page_queue_of(page: &mi_page_t) -> *mut mi_page_queue_t {
         let bin: u8 = if mi_page_t::is_in_full(page) {
-            mi_heap_t::MI_BIN_FULL as u8
+            Heap::MI_BIN_FULL as u8
         } else {
-            mi_heap_t::mi_bin((*page).xblock_size as usize)
+            Heap::mi_bin((*page).xblock_size as usize)
         };
-        let heap: *mut mi_heap_t = mi_page_t::heap(page);
-        debug_assert!(!heap.is_null() && bin <= mi_heap_t::MI_BIN_FULL as u8);
-        let pq: *mut mi_page_queue_t = mi_heap_t::get_page_queue(heap, bin);
+        let heap: *mut Heap = mi_page_t::heap(page);
+        debug_assert!(!heap.is_null() && bin <= Heap::MI_BIN_FULL as u8);
+        let pq: *mut mi_page_queue_t = Heap::get_page_queue(heap, bin);
         debug_assert!(
-            bin >= mi_heap_t::MI_BIN_HUGE as u8 || page.xblock_size == (*pq).block_size as u32
+            bin >= Heap::MI_BIN_HUGE as u8 || page.xblock_size == (*pq).block_size as u32
         );
         // TODO: mi_assert_expensive(mi_page_queue_contains(pq, page));
         pq
