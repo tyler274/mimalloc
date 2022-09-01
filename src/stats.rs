@@ -10,7 +10,7 @@
 // #endif
 // #endif
 
-use crate::bin::MI_BIN_HUGE;
+use crate::heap::mi_heap_t;
 
 struct mi_stat_count_s {
     allocated: i64,
@@ -50,7 +50,7 @@ pub struct mi_stats_s {
     huge_count: mi_stat_counter_t,
     large_count: mi_stat_counter_t,
     // #if MI_STAT > 1
-    normal_bins: [mi_stat_counter_t; MI_BIN_HUGE as usize + 1],
+    normal_bins: [mi_stat_counter_t; mi_heap_t::MI_BIN_HUGE as usize + 1],
     // #endif
 }
 pub type mi_stats_t = mi_stats_s;

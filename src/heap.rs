@@ -12,10 +12,11 @@
 // ------------------------------------------------------
 
 use crate::{
-    bin::MI_BIN_FULL,
     block::mi_block_t,
-    constants::MI_INTPTR_SIZE,
-    page::{mi_page_t, mi_page_uninit},
+    constants::{MI_ALIGN2W, MI_ALIGN4W, MI_ALIGNMENT, MI_INTPTR_SIZE},
+    internal::{_mi_align_up, _mi_wsize_from_size, mi_bsr},
+    os::_mi_os_page_size,
+    page::{mi_page_t, mi_page_uninit, MI_MEDIUM_OBJ_SIZE_MAX, MI_MEDIUM_OBJ_WSIZE_MAX},
     page_queue::{mi_page_queue_t, mi_page_queue_uninit},
     thread::{mi_threadid_t, mi_tld_t},
 };
@@ -75,7 +76,7 @@ const MI_PAGES_DIRECT: usize = MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1;
 pub struct mi_heap_s {
     tld: *mut mi_tld_t,
     pages_free_direct: [mi_page_t; MI_PAGES_DIRECT], // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
-    pub pages: [mi_page_queue_t; MI_BIN_FULL + 1], // queue of pages for each size class (or "bin")
+    pages: [mi_page_queue_t; Self::MI_BIN_FULL + 1], // queue of pages for each size class (or "bin")
     thread_delayed_free: AtomicPtr<mi_block_t>,
     thread_id: mi_threadid_t, // thread this heap belongs too
     cookie: usize,            // random cookie to verify pointers (see `_mi_ptr_cookie`)
@@ -95,7 +96,7 @@ impl mi_heap_s {
         Self {
             tld: std::ptr::null_mut(),
             pages_free_direct: [mi_page_uninit; MI_PAGES_DIRECT],
-            pages: [mi_page_queue_uninit; MI_BIN_FULL + 1],
+            pages: [mi_page_queue_uninit; Self::MI_BIN_FULL + 1],
             thread_delayed_free: AtomicPtr::new(std::ptr::null_mut()),
             thread_id: 0,
             cookie: 0,
@@ -116,8 +117,68 @@ impl mi_heap_s {
     where
         *const mi_page_queue_t: ~const PartialOrd,
     {
-        pq >= &(*heap).pages[0] && pq <= &(*heap).pages[MI_BIN_FULL]
+        pq >= &(*heap).pages[0] && pq <= &(*heap).pages[Self::MI_BIN_FULL]
         // consider introducing a `where` clause, but there might be an alternative better way to express this requirement: ` where *const mi_page_queue_s: ~const PartialOrd`
+    }
+
+    pub const fn bin_size(bin: u8) -> usize {
+        return mi_heap_t::_mi_heap_empty.pages[bin as usize].block_size;
+    }
+
+    pub const unsafe fn get_page_queue(heap: *mut mi_heap_s, bin: u8) -> *mut mi_page_queue_t {
+        (*heap).pages[bin as usize..].as_mut_ptr()
+    }
+
+    /* -----------------------------------------------------------
+      Bins
+    ----------------------------------------------------------- */
+
+    // Maximum number of size classes. (spaced exponentially in 12.5% increments)
+    pub const MI_BIN_HUGE: usize = 73;
+    pub const MI_BIN_FULL: usize = (Self::MI_BIN_HUGE + 1);
+
+    // Return the bin for a given field size.
+    // Returns MI_BIN_HUGE if the size is too large.
+    // We use `wsize` for the size in "machine word sizes",
+    // i.e. byte size == `wsize*sizeof(void*)`.
+    #[inline(always)]
+    pub const fn mi_bin(size: usize) -> u8 {
+        let mut wsize: usize = _mi_wsize_from_size(size);
+        let bin: u8;
+        if wsize <= 1 {
+            bin = 1;
+        } else if MI_ALIGNMENT == MI_ALIGN4W && wsize <= 4 {
+            bin = ((wsize + 1) & !1) as u8; // round to double word sizes
+        } else if MI_ALIGNMENT == MI_ALIGN2W && wsize <= 8 {
+            bin = ((wsize + 1) & !1) as u8; // round to double word sizes
+        } else if wsize <= 8 {
+            bin = wsize as u8;
+        } else if wsize > MI_MEDIUM_OBJ_WSIZE_MAX {
+            bin = Self::MI_BIN_HUGE as u8;
+        } else {
+            if wsize <= 16 && MI_ALIGNMENT == MI_ALIGN4W {
+                wsize = (wsize + 3) & !3;
+            } // round to 4x word sizes
+            wsize -= 1;
+            // find the highest bit
+            let b = mi_bsr(wsize) as u8; // note: wsize != 0
+                                         // and use the top 3 bits to determine the bin (~12.5% worst internal fragmentation).
+                                         // - adjust with 3 because we use do not round the first 8 sizes
+                                         //   which each get an exact bin
+            bin = ((b << 2) + ((wsize >> (b - 2)) & 0x03) as u8) - 3;
+            debug_assert!((bin as usize) < Self::MI_BIN_HUGE);
+        }
+        debug_assert!(bin > 0 && (bin as usize) <= Self::MI_BIN_HUGE);
+        bin
+    }
+
+    // Good size for allocation
+    pub const fn mi_good_size(size: usize) -> usize {
+        if size <= MI_MEDIUM_OBJ_SIZE_MAX {
+            return Self::bin_size(Self::mi_bin(size));
+        } else {
+            return _mi_align_up(size, _mi_os_page_size());
+        }
     }
 
     // TODO: implement
@@ -133,9 +194,9 @@ impl Default for mi_heap_s {
     }
 }
 
-unsafe impl Send for mi_heap_s {}
+// unsafe impl Send for mi_heap_s {}
 
-unsafe impl Sync for mi_heap_s {}
+// unsafe impl Sync for mi_heap_s {}
 
 pub type mi_heap_t = mi_heap_s;
 

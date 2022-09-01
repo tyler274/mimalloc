@@ -7,9 +7,9 @@
 #![feature(const_option)]
 #![feature(const_option_ext)]
 #![feature(const_refs_to_cell)]
+#![feature(const_slice_index)]
 mod alloc;
 mod arena;
-mod bin;
 mod bitmap;
 mod block;
 mod constants;
