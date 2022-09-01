@@ -139,7 +139,7 @@ unsafe impl Sync for mi_heap_s {}
 
 pub type mi_heap_t = mi_heap_s;
 
-pub static mut _mi_heap_main: UnsafeCell<mi_heap_t> = UnsafeCell::new(mi_heap_t::new());
+pub const _mi_heap_main: UnsafeCell<mi_heap_t> = UnsafeCell::new(mi_heap_t::new());
 
 pub const _mi_process_is_initialized: UnsafeCell<bool> = UnsafeCell::new(false);
 // mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing heap
