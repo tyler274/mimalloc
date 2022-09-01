@@ -10,7 +10,7 @@
 // #endif
 // #endif
 
-use crate::heap::MI_BIN_HUGE;
+use crate::bin::MI_BIN_HUGE;
 
 struct mi_stat_count_s {
     allocated: i64,
@@ -73,3 +73,17 @@ pub type mi_stats_t = mi_stats_s;
 // #define mi_heap_stat_counter_increase(heap, stat, amount) mi_stat_counter_increase((heap)->tld->stats.stat, amount)
 // #define mi_heap_stat_increase(heap, stat, amount) mi_stat_increase((heap)->tld->stats.stat, amount)
 // #define mi_heap_stat_decrease(heap, stat, amount) mi_stat_decrease((heap)->tld->stats.stat, amount)
+
+pub const MI_STAT_COUNT_NULL: [i32; 4] = [0, 0, 0, 0];
+
+// Empty statistics
+// pub const MI_STAT_COUNT_END_NULL = if MI_STAT > 1 {
+
+// } else {
+
+// }
+// #if MI_STAT>1
+// #define MI_STAT_COUNT_END_NULL()  , { MI_STAT_COUNT_NULL(), MI_INIT32(MI_STAT_COUNT_NULL) }
+// #else
+// #define MI_STAT_COUNT_END_NULL()
+// #endif

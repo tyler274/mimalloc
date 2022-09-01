@@ -35,3 +35,16 @@ pub const MI_ALIGNMENT_MAX: usize = 1024 * 1024; // maximum supported alignment 
 
 // blocks up to this size are always allocated aligned
 pub const MI_MAX_ALIGN_GUARANTEE: usize = 8 * MI_MAX_ALIGN_SIZE;
+
+pub const MI_ALIGN4W: usize = 4;
+pub const MI_ALIGN2W: usize = 2;
+pub const MI_ALIGN1W: usize = 1;
+pub const MI_ALIGNMENT: usize = if MI_MAX_ALIGN_SIZE > (4 * MI_INTPTR_SIZE) {
+    unimplemented!()
+} else if (MI_MAX_ALIGN_SIZE > 2 * MI_INTPTR_SIZE) {
+    MI_ALIGN4W
+} else if (MI_MAX_ALIGN_SIZE > MI_INTPTR_SIZE) {
+    MI_ALIGN2W
+} else {
+    MI_ALIGN1W
+};

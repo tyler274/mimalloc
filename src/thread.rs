@@ -2,7 +2,14 @@
 // Thread Local and related data
 // ------------------------------------------------------
 
-use crate::{segment::MI_SEGMENT_BIN_MAX, span_queue::mi_span_queue_t, stats::mi_stats_t};
+use crate::{
+    heap::{_mi_heap_main, mi_heap_t},
+    segment::MI_SEGMENT_BIN_MAX,
+    span_queue::mi_span_queue_t,
+    stats::mi_stats_t,
+};
+
+use std::cell::UnsafeCell;
 
 // thread id's
 pub type mi_threadid_t = usize;
@@ -66,17 +73,71 @@ struct mi_segments_tld_s {
     stats: *mut mi_stats_t,                           // points to tld stats
     os: *mut mi_os_tld_t,                             // points to os stats
 }
+
+impl mi_segments_tld_s {
+    pub const unsafe fn new() -> Self {
+        // todo!();
+        Self {
+            spans: mi_span_queue_t::MI_SEGMENT_SPAN_QUEUES_EMPTY,
+            count: 0,
+            peak_count: 0,
+            current_size: 0,
+            peak_size: 0,
+            stats: (*tld_main.get()).stats.as_mut().unwrap_unchecked(),
+            os: (*tld_main.get()).os.as_mut().unwrap_unchecked(),
+        }
+    }
+}
 type mi_segments_tld_t = mi_segments_tld_s;
 
 // Thread local data
 pub struct mi_tld_s {
-    heartbeat: u64,                            // monotonic heartbeat count
+    heartbeat: u64,                       // monotonic heartbeat count
     recurse: bool, // true if deferred was called; used to prevent infinite recursion.
-    heap_backing: *mut crate::heap::mi_heap_t, // backing heap of this thread (cannot be deleted)
-    heaps: *mut crate::heap::mi_heap_t, // list of heaps in this thread (so we can abandon all when the thread terminates)
-    segments: mi_segments_tld_t,        // segment tld
-    os: mi_os_tld_t,                    // os tld
-    stats: crate::stats::mi_stats_t,    // statistics
+    heap_backing: Option<*mut mi_heap_t>, // backing heap of this thread (cannot be deleted)
+    heaps: Option<*mut mi_heap_t>, // list of heaps in this thread (so we can abandon all when the thread terminates)
+    segments: Option<mi_segments_tld_t>, // segment tld
+    os: Option<mi_os_tld_t>,       // os tld
+    stats: Option<mi_stats_t>,     // statistics
 }
 
+impl mi_tld_s {
+    pub const unsafe fn new() -> Self {
+        // todo!();
+        Self {
+            heartbeat: 0,
+            recurse: false,
+            heap_backing: None,
+            heaps: None,
+            segments: None,
+            os: None,
+            stats: None,
+            // { MI_SEGMENT_SPAN_QUEUES_EMPTY, 0, 0, 0, 0, &tld_main.stats, &tld_main.os }, // segments
+            // { 0, &tld_main.stats },  // os
+            // { MI_STATS_NULL }       // stats
+        }
+    }
+}
+
+unsafe impl Send for mi_tld_s {}
+
+unsafe impl Sync for mi_tld_s {}
+
 pub type mi_tld_t = mi_tld_s;
+
+pub const tld_main: UnsafeCell<mi_tld_t> = unsafe { UnsafeCell::new(mi_tld_t::new()) };
+
+// TODO:
+/* ----------------------------------------------------------------------------------------
+The thread local default heap: `_mi_get_default_heap` returns the thread local heap.
+On most platforms (Windows, Linux, FreeBSD, NetBSD, etc), this just returns a
+__thread local variable (`_mi_heap_default`). With the initial-exec TLS model this ensures
+that the storage will always be available (allocated on the thread stacks).
+On some platforms though we cannot use that when overriding `malloc` since the underlying
+TLS implementation (or the loader) will call itself `malloc` on a first access and recurse.
+We try to circumvent this in an efficient way:
+- macOSX : we use an unused TLS slot from the OS allocated slots (MI_TLS_SLOT). On OSX, the
+           loader itself calls `malloc` even before the modules are initialized.
+- OpenBSD: we use an unused slot from the pthread block (MI_TLS_PTHREAD_SLOT_OFS).
+- DragonFly: defaults are working but seem slow compared to freeBSD (see PR #323)
+------------------------------------------------------------------------------------------- */

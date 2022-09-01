@@ -3,8 +3,13 @@
 #![feature(const_raw_ptr_comparison)]
 #![feature(const_trait_impl)]
 #![feature(strict_provenance)]
+#![feature(const_borrow)]
+#![feature(const_option)]
+#![feature(const_option_ext)]
+#![feature(const_refs_to_cell)]
 mod alloc;
 mod arena;
+mod bin;
 mod bitmap;
 mod block;
 mod constants;

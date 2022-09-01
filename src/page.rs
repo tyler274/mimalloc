@@ -2,10 +2,10 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 
 use crate::{
     block::mi_block_t,
+    constants::{MI_ALIGNMENT_MAX, MI_INTPTR_SIZE},
     heap::mi_heap_t,
     segment::MI_SEGMENT_SLICE_SIZE,
     thread::mi_delayed_t,
-    constants::{MI_ALIGNMENT_MAX, MI_INTPTR_SIZE},
 };
 
 // Main tuning parameters for page sizes

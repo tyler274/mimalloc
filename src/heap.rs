@@ -12,17 +12,14 @@
 // ------------------------------------------------------
 
 use crate::{
+    bin::MI_BIN_FULL,
     block::mi_block_t,
+    constants::MI_INTPTR_SIZE,
     page::{mi_page_t, mi_page_uninit},
     page_queue::{mi_page_queue_t, mi_page_queue_uninit},
     thread::{mi_threadid_t, mi_tld_t},
-    constants::MI_INTPTR_SIZE,
 };
-use std::sync::atomic::AtomicPtr;
-
-// Maximum number of size classes. (spaced exponentially in 12.5% increments)
-pub const MI_BIN_HUGE: usize = 73;
-pub const MI_BIN_FULL: usize = (MI_BIN_HUGE + 1);
+use std::{borrow::BorrowMut, cell::UnsafeCell, sync::atomic::AtomicPtr};
 
 // Random context
 #[derive(Debug, Clone, Copy)]
@@ -92,6 +89,8 @@ pub struct mi_heap_s {
 }
 
 impl mi_heap_s {
+    pub const _mi_heap_empty: mi_heap_t = mi_heap_t::new(); // read-only empty heap, initial value of the thread local default heap
+
     pub const fn new() -> Self {
         Self {
             tld: std::ptr::null_mut(),
@@ -109,6 +108,23 @@ impl mi_heap_s {
             no_reclaim: false,
         }
     }
+    #[cfg(debug_assertions)]
+    pub const unsafe fn mi_heap_contains_queue(
+        heap: *const mi_heap_t,
+        pq: *const mi_page_queue_t,
+    ) -> bool
+    where
+        *const mi_page_queue_t: ~const PartialOrd,
+    {
+        pq >= &(*heap).pages[0] && pq <= &(*heap).pages[MI_BIN_FULL]
+        // consider introducing a `where` clause, but there might be an alternative better way to express this requirement: ` where *const mi_page_queue_s: ~const PartialOrd`
+    }
+
+    // TODO: implement
+    // pub const unsafe fn _mi_heap_main_get() -> *mut Self {
+    //     // mi_heap_main_init();
+    //     return &_mi_heap_main;
+    // }
 }
 
 impl Default for mi_heap_s {
@@ -117,8 +133,13 @@ impl Default for mi_heap_s {
     }
 }
 
+unsafe impl Send for mi_heap_s {}
+
+unsafe impl Sync for mi_heap_s {}
+
 pub type mi_heap_t = mi_heap_s;
 
-pub const _mi_heap_empty: mi_heap_t = mi_heap_t::new(); // read-only empty heap, initial value of the thread local default heap
-pub static _mi_process_is_initialized: bool = false;
+pub static mut _mi_heap_main: UnsafeCell<mi_heap_t> = UnsafeCell::new(mi_heap_t::new());
+
+pub const _mi_process_is_initialized: UnsafeCell<bool> = UnsafeCell::new(false);
 // mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing heap
