@@ -1,3 +1,8 @@
+#![feature(const_ptr_is_null)]
+#![feature(const_mut_refs)]
+#![feature(const_raw_ptr_comparison)]
+#![feature(const_trait_impl)]
+#![feature(strict_provenance)]
 mod alloc;
 mod arena;
 mod bitmap;
@@ -12,18 +17,3 @@ mod random;
 mod segment;
 mod stats;
 mod types;
-
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = types::MI_SLICES_PER_SEGMENT;
-        assert_eq!(result, 1024);
-    }
-}

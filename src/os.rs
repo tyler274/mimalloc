@@ -9,13 +9,13 @@ const large_os_page_size: usize = 0;
 
 // is memory overcommit allowed?
 // set dynamically in _mi_os_init (and if true we use MAP_NORESERVE)
-const os_overcommit: bool = true;
+pub const os_overcommit: bool = true;
 
-const fn _mi_os_has_overcommit() -> bool {
+pub const fn _mi_os_has_overcommit() -> bool {
     os_overcommit
 }
 
 // OS (small) page size
-pub fn _mi_os_page_size() -> usize {
+pub const fn _mi_os_page_size() -> usize {
     os_page_size
 }

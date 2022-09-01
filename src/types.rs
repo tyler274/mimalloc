@@ -86,7 +86,7 @@ type mi_threadid_t = usize;
 
 // free lists contain blocks
 #[derive(Debug, Copy, Clone)]
-struct mi_block_s {
+pub struct mi_block_s {
     next: mi_encoded_t,
 }
 
@@ -96,21 +96,34 @@ impl mi_block_s {
     }
 }
 
-type mi_block_t = mi_block_s;
+pub type mi_block_t = mi_block_s;
 
 // The delayed flags are used for efficient multi-threaded free-ing
-#[derive(Debug, Copy, Clone)]
-enum mi_delayed_e {
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum mi_delayed_e {
     MI_USE_DELAYED_FREE = 0,   // push on the owning heap thread delayed list
     MI_DELAYED_FREEING = 1,    // temporary: another thread is accessing the owning heap
     MI_NO_DELAYED_FREE = 2, // optimize: push on page local thread free queue if another block is already in the heap thread delayed free list
     MI_NEVER_DELAYED_FREE = 3, // sticky, only resets on page reclaim
 }
 
-type mi_delayed_t = mi_delayed_e;
+impl mi_delayed_e {
+    pub const fn new(x: usize) -> Self {
+        match x {
+            0 => mi_delayed_t::MI_USE_DELAYED_FREE,
+            1 => mi_delayed_t::MI_DELAYED_FREEING,
+            2 => mi_delayed_t::MI_NO_DELAYED_FREE,
+            3 => mi_delayed_t::MI_NEVER_DELAYED_FREE,
+            _ => unimplemented!(),
+        }
+    }
+}
+
+pub type mi_delayed_t = mi_delayed_e;
 
 #[derive(Debug, Copy, Clone)]
-struct embedded_flag {
+pub struct embedded_flag {
     in_full: u8,
     has_aligned: u8,
 }
@@ -134,8 +147,8 @@ impl Default for embedded_flag {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub union mi_page_flags_s {
-    full_aligned: u8,
-    x: embedded_flag,
+    pub full_aligned: u8,
+    pub x: embedded_flag,
 }
 
 impl mi_page_flags_s {
@@ -205,31 +218,31 @@ pub struct mi_page_s {
     // layout like this to optimize access in `mi_malloc` and `mi_free`
     capacity: u16, // number of blocks committed, must be the first field, see `segment.c:page_clear`
     reserved: u16, // number of blocks reserved in memory
-    flags: mi_page_flags_t, // `in_full` and `has_aligned` flags (8 bits)
+    pub flags: mi_page_flags_t, // `in_full` and `has_aligned` flags (8 bits)
 
     is_zero: u8,       // `true` if the blocks in the free list are zero initialized
     retire_expire: u8, // expiration count for retired blocks
 
-    free: *mut mi_block_t, // list of available free blocks (`malloc` allocates from this list)
+    pub free: *mut mi_block_t, // list of available free blocks (`malloc` allocates from this list)
     // TODO:
     // #ifdef MI_ENCODE_FREELIST
     //   uintptr_t keys[2]; // two random keys to encode the free lists (see `_mi_block_next`)
     // #endif
     used: u32, // number of blocks in use (including blocks in `local_free` and `thread_free`)
-    xblock_size: u32, // size available in each block (always `>0`)
+    pub xblock_size: u32, // size available in each block (always `>0`)
 
     local_free: *mut mi_block_t, // list of deferred free blocks by this thread (migrates to `free`)
-    xthread_free: AtomicPtr<mi_thread_free_t>, // list of deferred free blocks freed by other threads
-    xheap: AtomicPtr<usize>,
+    pub xthread_free: AtomicPtr<mi_thread_free_t>, // list of deferred free blocks freed by other threads
+    pub xheap: AtomicPtr<mi_heap_t>,
 
-    next: *mut mi_page_s, // next page owned by this thread with the same `block_size`
-    prev: *mut mi_page_s, // previous page owned by this thread with the same `block_size`
+    pub next: *mut mi_page_s, // next page owned by this thread with the same `block_size`
+    pub prev: *mut mi_page_s, // previous page owned by this thread with the same `block_size`
 
-                          // TODO:
-                          // 64-bit 9 words, 32-bit 12 words, (+2 for secure)
-                          // #if MI_INTPTR_SIZE == 8
-                          // uintptr_t padding[1];
-                          // #endif
+                              // TODO:
+                              // 64-bit 9 words, 32-bit 12 words, (+2 for secure)
+                              // #if MI_INTPTR_SIZE == 8
+                              // uintptr_t padding[1];
+                              // #endif
 }
 impl mi_page_s {
     const fn new() -> Self {
@@ -260,6 +273,19 @@ impl mi_page_s {
             prev: std::ptr::null_mut(),
         }
     }
+    // are all blocks in a page freed?
+    // note: needs up-to-date used count, (as the `xthread_free` list may not be empty). see
+    // `_mi_page_collect_free`.
+    #[inline(always)]
+    const unsafe fn mi_page_all_free(page: *const mi_page_t) -> bool {
+        debug_assert!(!page.is_null());
+        (*page).used == 0
+    }
+
+    #[inline(always)]
+    pub const unsafe fn mi_page_is_in_full(page: *const mi_page_t) -> bool {
+        (*page).flags.x.in_full != 0
+    }
 }
 impl Default for mi_page_s {
     fn default() -> Self {
@@ -269,7 +295,7 @@ impl Default for mi_page_s {
 
 const mi_page_uninit: mi_page_s = mi_page_s::new();
 
-type mi_page_t = mi_page_s;
+pub type mi_page_t = mi_page_s;
 
 enum mi_page_kind_e {
     MI_PAGE_SMALL,  // small blocks go into 64KiB pages inside a segment
@@ -365,6 +391,7 @@ type mi_segment_t = mi_segment_s;
 // ------------------------------------------------------
 
 // Pages of a certain block size are held in a queue.
+#[derive(PartialEq, PartialOrd)]
 pub struct mi_page_queue_s {
     pub first: *mut mi_page_t,
     pub last: *mut mi_page_t,
@@ -390,7 +417,7 @@ pub const mi_page_queue_uninit: mi_page_queue_s = mi_page_queue_s::new();
 
 pub type mi_page_queue_t = mi_page_queue_s;
 
-const MI_BIN_FULL: usize = (MI_BIN_HUGE + 1);
+pub const MI_BIN_FULL: usize = (MI_BIN_HUGE + 1);
 
 // Random context
 #[derive(Debug, Clone, Copy)]
